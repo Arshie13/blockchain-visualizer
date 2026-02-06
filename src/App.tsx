@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, type ChangeEvent, type MouseEvent } from 'react';
-import { Block, Blockchain } from './core/Block';
+import { Block, Blockchain } from './core';
 import './App.css';
 
 const App: React.FC = () => {
