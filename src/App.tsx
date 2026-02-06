@@ -3,7 +3,6 @@ import { Block, Blockchain } from './core/Block';
 import './App.css';
 
 const App: React.FC = () => {
-  const [blockchain, setBlockchain] = useState<Blockchain>(new Blockchain(2));
   const [data, setData] = useState<string>('');
   const [difficulty, setDifficulty] = useState<number>(2);
   const [mining, setMining] = useState<boolean>(false);
@@ -12,7 +11,12 @@ const App: React.FC = () => {
   const [editingIndex, setEditingIndex] = useState<number>(-1);
   const [editData, setEditData] = useState<string>('');
   const stopMiningRef = useRef<boolean>(false);
+  const [blockchain, setBlockchain] = useState<Blockchain>(new Blockchain(2));
 
+  /**
+   * Ensures the displayed blockchain stays in sync with state.
+   * Runs when difficulty changes.
+   */
   useEffect(() => {
     const timer = setInterval(() => {
       setBlockchain((prev) => {
@@ -24,6 +28,25 @@ const App: React.FC = () => {
     return () => clearInterval(timer);
   }, [difficulty]);
 
+  /**
+   * Update elapsed time display during mining.
+   */
+  useEffect(() => {
+    let interval: number;
+    if (mining) {
+      const startTime = Date.now();
+      interval = window.setInterval(() => {
+        setElapsedTime(Date.now() - startTime);
+      }, 10);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [mining]);
+
+  /**
+   * Mine a new block with the provided data.
+   */
   const handleMineBlock = async (e: MouseEvent<HTMLButtonElement>): Promise<void> => {
     e.preventDefault();
     if (!data.trim()) return;
@@ -50,15 +73,22 @@ const App: React.FC = () => {
     setMining(false);
   };
 
+  /**
+   * Sets the stop ref which is checked in the mining loop.
+   */
   const handleStopMining = (): void => {
     stopMiningRef.current = true;
   };
 
+  /**
+   * Handler: Tamper with a specific block.
+   * Creates a new block with 'TAMPERED!' data at the specified index.
+   */
   const handleTamperBlock = (index: number): void => {
     const newChain = new Blockchain(blockchain.difficulty);
     newChain.chain = Blockchain.deepCopy(blockchain.chain);
     
-    // Tamper the specific block
+    // Create a tampered block with modified data but same metadata
     const tamperedBlock = new Block(
       newChain.chain[index].index,
       newChain.chain[index].timestamp,
@@ -66,12 +96,16 @@ const App: React.FC = () => {
       newChain.chain[index].previousHash,
       newChain.chain[index].nonce
     );
+    // Recalculate hash with new data which will break the chain
     tamperedBlock.hash = tamperedBlock.calculateHash();
     newChain.chain[index] = tamperedBlock;
     
     setBlockchain(newChain);
   };
 
+  /**
+   * Saves the edited data and recalculates the hash.
+   */
   const handleUpdateEdit = (index: number): void => {
     const newChain = new Blockchain(blockchain.difficulty);
     newChain.chain = Blockchain.deepCopy(blockchain.chain);
@@ -82,32 +116,36 @@ const App: React.FC = () => {
     setEditData('');
   };
 
+  /**
+   * Update data input field.
+   */
   const handleDataChange = (e: ChangeEvent<HTMLInputElement>): void => {
     setData(e.target.value);
   };
 
+  /**
+   * Update difficulty setting.
+   */
   const handleDifficultyChange = (e: ChangeEvent<HTMLInputElement>): void => {
     setDifficulty(Number(e.target.value));
   };
 
-  const handleEditChange = (index: number, e: ChangeEvent<HTMLInputElement>): void => {
+  /**
+   * Enables edit mode and initializes edit data.
+   */
+  const handleStartEdit = (index: number): void => {
     setEditingIndex(index);
+    setEditData(blockchain.chain[index].data);
+  };
+
+  /**
+   * Handler: Update the temporary edit data.
+   */
+  const handleEditChange = (e: ChangeEvent<HTMLInputElement>): void => {
     setEditData(e.target.value);
   };
 
-  useEffect(() => {
-    let interval: number;
-    if (mining) {
-      const startTime = Date.now();
-      interval = window.setInterval(() => {
-        setElapsedTime(Date.now() - startTime);
-      }, 10);
-    }
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [mining]);
-
+  /** Checks whether the entire blockchain is still valid */
   const isValid = blockchain.isValid();
 
   return (
@@ -129,6 +167,7 @@ const App: React.FC = () => {
           disabled={mining}
           min="1"
           max="6"
+          title="Mining difficulty (1-6)"
         />
         <button onClick={handleMineBlock} disabled={mining || !data.trim()}>
           {mining ? `⛏ Mining... ${elapsedTime}ms` : '⛏ Mine Block'}
@@ -149,9 +188,16 @@ const App: React.FC = () => {
 
       <div className="chain">
         {blockchain.chain.map((block: Block, index: number) => {
+          // Check if this block's previousHash matches the previous block's hash
           const prevHashMatch = index === 0 || blockchain.chain[index - 1].hash === block.previousHash;
+          // Check if this specific block's hash is valid
+          const blockHashValid = block.hash === block.calculateHash();
+          
           return (
-            <div key={index} className={`block ${!isValid ? 'invalid' : ''}`}>
+            <div 
+              key={index} 
+              className={`block ${!blockHashValid || !prevHashMatch ? 'invalid' : ''}`}
+            >
               <div className="block-header">
                 <h3>Block #{block.index}</h3>
                 <div className={`link ${prevHashMatch ? 'valid-link' : 'invalid-link'}`}>
@@ -166,15 +212,29 @@ const App: React.FC = () => {
               </div>
               {index > 0 && (
                 <div className="block-actions">
-                  <button onClick={() => handleTamperBlock(index)}>💥 Tamper Data</button>
-                  <input
-                    type="text"
-                    value={editingIndex === index ? editData : block.data}
-                    onChange={(e) => handleEditChange(index, e)}
-                    onBlur={() => handleUpdateEdit(index)}
-                    placeholder="Edit block data..."
-                    className="edit-input"
-                  />
+                  <button onClick={() => handleTamperBlock(index)} title="Tamper with this block">
+                    💥 Tamper
+                  </button>
+                  {editingIndex === index ? (
+                    <>
+                      <input
+                        type="text"
+                        value={editData}
+                        onChange={(e) => handleEditChange(e)}
+                        onBlur={() => handleUpdateEdit(index)}
+                        placeholder="Edit block data..."
+                        className="edit-input"
+                        autoFocus
+                      />
+                      <button onClick={() => handleUpdateEdit(index)} title="Save changes">
+                        ✓ Save
+                      </button>
+                    </>
+                  ) : (
+                    <button onClick={() => handleStartEdit(index)} title="Edit this block">
+                      ✏️ Edit
+                    </button>
+                  )}
                 </div>
               )}
             </div>
