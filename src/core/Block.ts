@@ -1,40 +1,33 @@
-import { SHA256 } from 'crypto-js';
+import crypto from 'crypto-js';
+import { Transaction } from './Transaction';
 
-/**
- * Interface representing the data structure of a block in the blockchain.
- */
+// Helper function to create SHA256 hash
+function sha256(data: string): string {
+  return crypto.SHA256(data).toString();
+}
+
+// Interface representing the data structure of a block in the blockchain.
 interface BlockData {
   index: number;
   timestamp: number;
-  data: string;
+  data: Transaction[];
   previousHash: string;
   nonce: number;
   hash: string;
 }
 
-/**
- * Block class representing a single block in the blockchain.
- * Each block contains data and links to the previous block via its hash.
- */
+// Block class representing a single block in the blockchain.
 export class Block implements BlockData {
   public index: number;
   public timestamp: number;
-  public data: string;
+  public data: Transaction[];
   public previousHash: string;
   public nonce: number;
   public hash: string;
 
-  /**
-   * Creates a new block with the given parameters.
-   * Automatically calculates the hash upon creation.
-   * 
-   * @param index - Position in the blockchain
-   * @param timestamp - Creation timestamp
-   * @param data - Transaction/data to store
-   * @param previousHash - Hash of the previous block
-   * @param nonce - Mining nonce (default 0)
-   */
-  constructor(index: number, timestamp: number, data: string, previousHash: string = '', nonce: number = 0) {
+
+  // Creates a new block with the given parameters.
+  constructor(index: number, timestamp: number, data: Transaction[], previousHash: string = '', nonce: number = 0) {
     this.index = index;
     this.timestamp = timestamp;
     this.data = data;
@@ -43,33 +36,40 @@ export class Block implements BlockData {
     this.hash = this.calculateHash();
   }
 
-  /**
-   * Calculates the cryptographic hash of the block.
-   * Uses SHA256 to hash: index + previousHash + timestamp + data + nonce
-   * 
-   * @returns The hexadecimal hash string of this block
-   */
+  // Calculates the cryptographic hash of the block
   calculateHash(): string {
-    return SHA256(
-      this.index + 
+    return sha256(
+      String(this.index) + 
       this.previousHash + 
-      this.timestamp + 
+      String(this.timestamp) + 
       JSON.stringify(this.data) + 
-      this.nonce
-    ).toString();
+      String(this.nonce)
+    );
   }
 
-  /**
-   * Mines the block by finding a nonce that produces a hash with the required number of leading zeros.
-   * This implements the proof-of-work consensus mechanism.
-   * 
-   * @param difficulty - Number of leading zeros required in the hash
-   * @param stopRef - Optional ref to allow cancellation of mining
-   * @returns Time taken to mine the block (in milliseconds)
-   * @throws Error if mining is stopped via stopRef
-   */
-  async mineBlock(difficulty: number, stopRef?: React.MutableRefObject<boolean>): Promise<number> {
+  // Mines the block by finding a nonce that produces a hash with the required number of leading zeros
+  mineBlock(difficulty: number, minerAddress: string, coinbaseReward: number = 50): { miningTime: number; coinbaseTx: Transaction } {
     const target = '0'.repeat(difficulty);
+    const start = performance.now();
+    
+    while (this.hash.substring(0, difficulty) !== target) {
+      this.nonce++;
+      this.hash = this.calculateHash();
+    }
+    
+    // Calculate mining time to display in page
+    const miningTime = performance.now() - start;
+
+    // Create coinbase transaction for the miner
+    const coinbaseTx = new Transaction('COINBASE', minerAddress, coinbaseReward);    
+
+    return { miningTime, coinbaseTx };
+  }
+
+  // Mines the block asynchronously (for UI responsiveness)
+  async mineBlockAsync(difficulty: number, stopRef?: { current: boolean }): Promise<number> {
+    const target = '0'.repeat(difficulty);
+
     const start = performance.now();
     
     while (this.hash.substring(0, difficulty) !== target) {

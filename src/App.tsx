@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, type ChangeEvent, type MouseEvent } from 'react';
-import { Block, Blockchain } from './core';
+import { Block, Blockchain, Transaction } from './core';
 import './App.css';
 
 const App: React.FC = () => {
@@ -13,10 +13,7 @@ const App: React.FC = () => {
   const stopMiningRef = useRef<boolean>(false);
   const [blockchain, setBlockchain] = useState<Blockchain>(new Blockchain(2));
 
-  /**
-   * Ensures the displayed blockchain stays in sync with state.
-   * Runs when difficulty changes.
-   */
+  //Ensures the displayed blockchain stays in sync with state.
   useEffect(() => {
     const timer = setInterval(() => {
       setBlockchain((prev) => {
@@ -28,9 +25,7 @@ const App: React.FC = () => {
     return () => clearInterval(timer);
   }, [difficulty]);
 
-  /**
-   * Update elapsed time display during mining.
-   */
+  //Update elapsed time display during mining
   useEffect(() => {
     let interval: number;
     if (mining) {
@@ -44,9 +39,7 @@ const App: React.FC = () => {
     };
   }, [mining]);
 
-  /**
-   * Mine a new block with the provided data.
-   */
+  //Mine a new block with the provided data
   const handleMineBlock = async (e: MouseEvent<HTMLButtonElement>): Promise<void> => {
     e.preventDefault();
     if (!data.trim()) return;
@@ -60,11 +53,11 @@ const App: React.FC = () => {
     newChain.chain = Blockchain.deepCopy(blockchain.chain);
     
     try {
-      const time = await newChain.addBlock(data, stopMiningRef);
+      const time = await newChain.addBlock(data);
       if (!stopMiningRef.current) {
         setBlockchain(newChain);
         setData('');
-        setMiningTime(time);
+        setMiningTime(time.miningTime);
       }
     } catch (e) {
       alert("Mining stopped");
@@ -73,26 +66,21 @@ const App: React.FC = () => {
     setMining(false);
   };
 
-  /**
-   * Sets the stop ref which is checked in the mining loop.
-   */
+  //Sets the stop ref which is checked in the mining loop.   
   const handleStopMining = (): void => {
     stopMiningRef.current = true;
   };
 
-  /**
-   * Handler: Tamper with a specific block.
-   * Creates a new block with 'TAMPERED!' data at the specified index.
-   */
+  //Handler: Tamper with a specific block
   const handleTamperBlock = (index: number): void => {
     const newChain = new Blockchain(blockchain.difficulty);
     newChain.chain = Blockchain.deepCopy(blockchain.chain);
     
-    // Create a tampered block with modified data but same metadata
+    // Create a tampered block with empty data array to break the chain
     const tamperedBlock = new Block(
       newChain.chain[index].index,
       newChain.chain[index].timestamp,
-      'TAMPERED!',
+      [],
       newChain.chain[index].previousHash,
       newChain.chain[index].nonce
     );
@@ -103,49 +91,53 @@ const App: React.FC = () => {
     setBlockchain(newChain);
   };
 
-  /**
-   * Saves the edited data and recalculates the hash.
-   */
+  
+  //Saves the edited data and recalculates the hash.
   const handleUpdateEdit = (index: number): void => {
     const newChain = new Blockchain(blockchain.difficulty);
     newChain.chain = Blockchain.deepCopy(blockchain.chain);
-    newChain.chain[index].data = editData;
+    
+    // Convert string input to Transaction array
+    if (editData.trim()) {
+      const tx = new Transaction('USER', 'EDIT', parseFloat(editData) || 0);
+      newChain.chain[index].data = [tx];
+    } else {
+      newChain.chain[index].data = [];
+    }
+    
     newChain.chain[index].hash = newChain.chain[index].calculateHash();
     setBlockchain(newChain);
     setEditingIndex(-1);
     setEditData('');
   };
 
-  /**
-   * Update data input field.
-   */
+  //Update data input field.
   const handleDataChange = (e: ChangeEvent<HTMLInputElement>): void => {
     setData(e.target.value);
   };
 
-  /**
-   * Update difficulty setting.
-   */
+  
+  //Update difficulty setting.
   const handleDifficultyChange = (e: ChangeEvent<HTMLInputElement>): void => {
     setDifficulty(Number(e.target.value));
   };
 
-  /**
-   * Enables edit mode and initializes edit data.
-   */
+  //Enables edit mode and initializes edit data.
   const handleStartEdit = (index: number): void => {
     setEditingIndex(index);
-    setEditData(blockchain.chain[index].data);
+    // Convert Transaction[] to string for editing
+    const txStrings = blockchain.chain[index].data.map(tx => tx.toString());
+    setEditData(txStrings.join('; '));
   };
 
-  /**
-   * Handler: Update the temporary edit data.
-   */
+  
+  //Handler: Update the temporary edit data.
+   
   const handleEditChange = (e: ChangeEvent<HTMLInputElement>): void => {
     setEditData(e.target.value);
   };
 
-  /** Checks whether the entire blockchain is still valid */
+  // Checks whether the entire blockchain is still valid 
   const isValid = blockchain.isValid();
 
   return (
@@ -205,7 +197,7 @@ const App: React.FC = () => {
                 </div>
               </div>
               <div className="block-body">
-                <p><strong>Data:</strong> <span>{block.data}</span></p>
+                <p><strong>Data:</strong> <span>{block.data.map(tx => tx.toString()).join('; ')}</span></p>
                 <p><strong>Hash:</strong> <span>{block.hash.substring(0, 32)}...</span></p>
                 <p><strong>Nonce:</strong> <span>{block.nonce.toLocaleString()}</span></p>
                 <p><strong>Timestamp:</strong> <span>{new Date(block.timestamp).toLocaleString()}</span></p>
