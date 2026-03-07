@@ -9,6 +9,12 @@ npm install
 npm run dev
 ```
 
+## How to run /src/cli/main.ts
+
+```bash
+npm run cli
+```
+
 ![Blockchain Visualizer](./public/screenshot1.png)
 
 ![Blockchain Visualizer](./public/screenshot2.png)
